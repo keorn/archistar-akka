@@ -33,13 +33,6 @@
         <version>2.0M10</version>
         <scope>test</scope>
     </dependency>
-    <!-- the existing bft library -->
-    <dependency>
-        <groupId>at.archistar</groupId>
-        <artifactId>archistar-bft</artifactId>
-        <version>0.2-wip</version>
-        <type>jar</type>
-    </dependency>
   </dependencies>
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
