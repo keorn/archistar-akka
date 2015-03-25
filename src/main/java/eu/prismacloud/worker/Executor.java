@@ -1,14 +1,9 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
-package eu.prismacloud;
+package eu.prismacloud.worker;
 
 import akka.actor.Props;
 import akka.actor.UntypedActor;
 import akka.japi.Creator;
-import eu.prismacloud.messages.Execute;
+import eu.prismacloud.message.Execute;
 
 /**
  *
@@ -41,8 +36,11 @@ public class Executor extends UntypedActor {
             if (cmd.getSequenceNr() > lastExecuted) {
                 System.err.println("\nreplica[" + replicaId + "|" + cmd.getSequenceNr() + " EXECUTE " + cmd.getCommand());
                 lastExecuted = cmd.getSequenceNr();
+                System.err.println("sending message back to " + getSender());
+                getSender().tell("something was executed", getSelf());
+            } else {
+                /* TODO: send error back to client? */
             }
-            /* TODO: send result back to client */
         } else {
             unhandled(o);
         }

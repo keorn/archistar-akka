@@ -1,20 +1,15 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
-package eu.prismacloud;
+package eu.prismacloud.worker;
 
 import akka.actor.ActorRef;
 import akka.actor.ActorSelection;
 import akka.actor.Props;
 import akka.actor.UntypedActor;
 import akka.japi.Creator;
-import eu.prismacloud.messages.ClientCommand;
-import eu.prismacloud.messages.Commit;
-import eu.prismacloud.messages.Execute;
-import eu.prismacloud.messages.Prepare;
-import eu.prismacloud.messages.Preprepare;
+import eu.prismacloud.message.ClientCommand;
+import eu.prismacloud.message.Commit;
+import eu.prismacloud.message.Execute;
+import eu.prismacloud.message.Prepare;
+import eu.prismacloud.message.Preprepare;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -47,18 +42,17 @@ public class Transaction extends UntypedActor {
     
     private final Set<Commit> commitCommands;
     
-    private final ActorRef executor;
+    private final  ActorRef executor;
     
     private final int replicaId;
-    
-    private boolean primary;
-    
+        
     private boolean prepreparedReceived = false;
 
     public static Props props(boolean primary, boolean prepreparedReceived, int replicaId, ActorRef executor, Set<ActorSelection> peers, int f, int sequenceNr, ClientCommand cmd, final ActorRef client) {
         return Props.create(new Creator<Transaction>() {
            @Override
            public Transaction create() throws Exception {
+                System.err.println("replica " + replicaId + " set CLIENT to " +client);
                return new Transaction(primary, prepreparedReceived, replicaId, executor, peers, f, sequenceNr, cmd, client);
            }
         });
@@ -74,7 +68,6 @@ public class Transaction extends UntypedActor {
         this.commitCommands = new HashSet<>();
         this.executor = executor;
         this.replicaId = replicaId;
-        this.primary = primary;
         this.prepreparedReceived  = true;
  
         if (primary) {
@@ -111,7 +104,7 @@ public class Transaction extends UntypedActor {
         }
         if (state == STATE.PREPARED && commitCommands.size() == (2*fCount + 1)) {
             System.err.println("replica " + replicaId + " PREPARED -> EXECUTE");
-            this.executor.tell(new Execute(sequenceNr, this.clientCommand.getCommand()), ActorRef.noSender());
+            this.executor.tell(new Execute(sequenceNr, this.clientCommand.getCommand()), this.client);
         }
     }
     
@@ -122,6 +115,8 @@ public class Transaction extends UntypedActor {
         
         if (o instanceof ClientCommand) {
             this.clientCommand = (ClientCommand)o;
+            System.err.println("replica " + replicaId + " set CLIENT (through client command) to " +client);
+            this.client = getSender();
             checkState();
         } else if (o instanceof Preprepare) {
             this.prepreparedReceived = true;

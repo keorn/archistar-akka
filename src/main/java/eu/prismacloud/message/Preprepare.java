@@ -3,21 +3,28 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package eu.prismacloud.messages;
+package eu.prismacloud.message;
 
 /**
  *
  * @author andy
  */
-public class Prepare {
+public class Preprepare extends ReplicaCommand {
     
     private final int sequenceNr;
     
-    public Prepare(int sequenceNr) {
+    private final int clientSequence;
+    
+    public Preprepare(int sequenceNr, int clientSequence) {
         this.sequenceNr = sequenceNr;
+        this.clientSequence = clientSequence;
     }
     
     public int getSequenceNr() {
         return this.sequenceNr;
+    }
+    
+    public int getClientSequence() {
+        return this.clientSequence;
     }
 }

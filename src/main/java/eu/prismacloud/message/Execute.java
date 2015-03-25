@@ -3,21 +3,27 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package eu.prismacloud.messages;
+package eu.prismacloud.message;
 
 /**
  *
  * @author andy
  */
-public class Commit {
- 
+public class Execute {
     private final int sequenceNr;
     
-    public Commit(int sequenceNr) {
+    private final String command;
+    
+    public Execute(int sequenceNr, String command) {
+        this.command = command;
         this.sequenceNr = sequenceNr;
     }
     
     public int getSequenceNr() {
         return this.sequenceNr;
+    }
+    
+    public String getCommand() {
+        return this.command;
     }
 }

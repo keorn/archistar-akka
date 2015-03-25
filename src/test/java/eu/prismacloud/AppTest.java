@@ -1,16 +1,27 @@
 package eu.prismacloud;
 
+import eu.prismacloud.worker.Replica;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
+import akka.dispatch.Futures;
+import akka.pattern.Patterns;
 import akka.testkit.JavaTestKit;
-import eu.prismacloud.messages.ClientCommand;
-import eu.prismacloud.messages.Configure;
+import akka.util.Timeout;
+import eu.prismacloud.message.ClientCommand;
+import eu.prismacloud.message.Configure;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import scala.concurrent.Await;
+import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
+
+import static org.fest.assertions.api.Assertions.assertThat;
 
 public class AppTest {
     
@@ -35,27 +46,38 @@ public class AppTest {
     }
 
     @Test
-    public void simpleOneWay() throws Exception {
+    public void simpleTwoWay() throws Exception {
 
         new JavaTestKit(system) {{
             /* send Configure message to all replicas */
             replicas.parallelStream()
                     .forEach(f -> f.tell(Configure.fromReplicas(replicas), ActorRef.noSender()));
-    
-            /* send a request and wait for an answer; TODO: can we do this with parallelStream and Exception handling? */
             
-            new Within(Duration.create(10, "second")) {
+            new Within(Duration.create(5, "second")) {
             
                 public void run() {
-                    for(ActorRef ref : replicas) {
-                        ref.tell(new ClientCommand(1, "fubar"), ActorRef.noSender());
-                    }
-                /*
-                Timeout timeout = new Timeout(Duration.create(5, "seconds"));
-                Future<Object> result = Patterns.ask(ref, new ClientCommand(1, "fubar"), timeout);
-                Await.result(result, timeout.duration());
-                    }*/
                 
+                    final Timeout timeout = new Timeout(Duration.create(3, "seconds"));
+                    
+                    final ArrayList<Future<Object>> promises = new ArrayList<>();
+                    
+                    replicas.parallelStream().forEach(ref -> promises.add(Patterns.ask(ref, new ClientCommand(1, "fubar"), timeout)));
+                    
+                    final Future<Iterable<Object>> aggregate = Futures.sequence(promises, system.dispatcher());
+                    
+                    try {
+                        Iterable<Object> result = Await.result(aggregate, timeout.duration());
+                        int sum = 0;
+                        for(Object o : result) {
+                            System.err.println("result: " + o);
+                            sum++;
+                        }
+                        assertThat(sum).isEqualTo(4);
+                        System.err.println("got " + sum + " replies!");
+                     
+                    } catch (Exception ex) {
+                        Logger.getLogger(AppTest.class.getName()).log(Level.SEVERE, null, ex);
+                    }
                     expectNoMsg();
                 }
             };

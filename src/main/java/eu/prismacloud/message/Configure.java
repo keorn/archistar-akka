@@ -1,4 +1,4 @@
-package eu.prismacloud.messages;
+package eu.prismacloud.message;
 
 import akka.actor.ActorRef;
 import java.util.Set;
