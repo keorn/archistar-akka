@@ -1,29 +1,28 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package eu.prismacloud.message;
 
 /**
- *
+ * NOTE: in traditional PBFT the client is also passed within the ClientCommand.
+ *       In our prototype this is achieved by the implicit sender reference.
+ * 
  * @author andy
  */
 public class ClientCommand {
-    final private int sequenceId;
     
-    final private String command;
+    final public int sequenceId;
     
-    public ClientCommand(int sequenceId, String command) {
+    final public String operation;
+    
+    final public long timestamp;
+    
+    final public static byte[] command = "REQUEST".getBytes();
+    
+    /* if we would have quantum links we wouldn't have to create MACs */
+    final public byte[] mac;
+    
+    ClientCommand(int sequenceId, String command, long timestamp, byte[] mac) {
         this.sequenceId = sequenceId;
-        this.command = command;
-    }
-    
-    public int getSequenceId() {
-        return this.sequenceId;
-    }
-    
-    public String getCommand() {
-        return this.command;
+        this.operation = command;
+        this.timestamp = timestamp;
+        this.mac = mac;
     }
 }

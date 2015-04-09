@@ -9,6 +9,7 @@ import akka.japi.Procedure;
 import eu.prismacloud.message.ClientCommand;
 import eu.prismacloud.message.Commit;
 import eu.prismacloud.message.Configure;
+import eu.prismacloud.message.MessageBuilder;
 import eu.prismacloud.message.Prepare;
 import eu.prismacloud.message.Preprepare;
 import java.util.HashMap;
@@ -37,8 +38,10 @@ public class Replica extends UntypedActor {
     
     private final ActorRef executor;
     
-    private ActorRef createTransaction(ClientCommand cmd, int seq, boolean prepreparedReceived, ActorRef sender) {
-        return getContext().actorOf(Transaction.props(isMaster(), prepreparedReceived, replicaId, executor, peers, fCount, seq, cmd, sender));
+    private final int viewNr = 1;
+    
+    private ActorRef createTransaction(ClientCommand cmd, int seq, Preprepare preprepare, ActorRef sender) {
+        return getContext().actorOf(Transaction.props(isMaster(), preprepare, replicaId, executor, peers, fCount, seq, cmd, sender));
     }
     
     private Procedure<Object> configured = (Object message) -> {
@@ -46,46 +49,47 @@ public class Replica extends UntypedActor {
         if (message instanceof ClientCommand) {
             ClientCommand cmd = (ClientCommand)message;
             if (this.isMaster()) {
-                ActorRef t = createTransaction(cmd, ++seqCounter, true, getSender());
+                int newSeq = ++seqCounter;
+                ActorRef t = createTransaction(cmd, newSeq, MessageBuilder.crateFakeSelfPreprepare(newSeq, viewNr, cmd), getSender());
                 transactionMap.put(seqCounter, t);
-                transactionMapClient.put(cmd.getSequenceId(), t);
+                transactionMapClient.put(cmd.sequenceId, t);
             } else {
                 /* was the client id already mentioned before? */
-                if (transactionMapClient.containsKey(cmd.getSequenceId())) {
-                    transactionMapClient.get(cmd.getSequenceId()).tell(cmd, getSender());
+                if (transactionMapClient.containsKey(cmd.sequenceId)) {
+                    transactionMapClient.get(cmd.sequenceId).tell(cmd, getSender());
                 } else {
                     /* cannot create transaction without sequence count */
-                    clientMap.put(cmd.getSequenceId(), cmd);
-                    clientRefMap.put(cmd.getSequenceId(), getSender());
+                    clientMap.put(cmd.sequenceId, cmd);
+                    clientRefMap.put(cmd.sequenceId, getSender());
                 }
             }
         } else if (message instanceof Preprepare) {
             Preprepare cmd = (Preprepare)message;            
             
-            if (transactionMap.containsKey(cmd.getSequenceNr())) {
-                ActorRef t = transactionMap.get(cmd.getClientSequence());
-                transactionMapClient.put(cmd.getClientSequence(), t);
+            if (transactionMap.containsKey(cmd.sequenceNr)) {
+                ActorRef t = transactionMap.get(cmd.clientSequence);
+                transactionMapClient.put(cmd.clientSequence, t);
                 
                 t.tell(cmd, ActorRef.noSender());
-                if (clientMap.containsKey(cmd.getClientSequence())) {
-                    ClientCommand cCmd = clientMap.remove(cmd.getClientSequence());
-                    t.tell(cCmd, clientRefMap.remove(cmd.getClientSequence()));
+                if (clientMap.containsKey(cmd.clientSequence)) {
+                    ClientCommand cCmd = clientMap.remove(cmd.clientSequence);
+                    t.tell(cCmd, clientRefMap.remove(cmd.clientSequence));
                 }
             } else {
-                ClientCommand cCmd = clientMap.remove(cmd.getClientSequence());
-                ActorRef t = createTransaction(cCmd, cCmd.getSequenceId(), true, clientRefMap.remove(cmd.getClientSequence()));
-                transactionMap.put(cmd.getSequenceNr(), t);
-                transactionMapClient.put(cmd.getClientSequence(), t);
+                ClientCommand cCmd = clientMap.remove(cmd.clientSequence);
+                ActorRef t = createTransaction(cCmd, cCmd.sequenceId, cmd, clientRefMap.remove(cmd.clientSequence));
+                transactionMap.put(cmd.sequenceNr, t);
+                transactionMapClient.put(cmd.clientSequence, t);
             }
         } else if (message instanceof Prepare) {
             Prepare cmd = (Prepare)message;
-            ActorRef t = transactionMap.computeIfAbsent(cmd.getSequenceNr(),
-                                                        f -> createTransaction(null, cmd.getSequenceNr(), false, ActorRef.noSender()));
+            ActorRef t = transactionMap.computeIfAbsent(cmd.sequenceNr,
+                                                        f -> createTransaction(null, cmd.sequenceNr, null, ActorRef.noSender()));
             t.tell(cmd, ActorRef.noSender());
         } else if (message instanceof Commit) {
             Commit cmd = (Commit)message;
-            ActorRef t = transactionMap.computeIfAbsent(cmd.getSequenceNr(),
-                                                        f -> createTransaction(null, cmd.getSequenceNr(), false, ActorRef.noSender()));
+            ActorRef t = transactionMap.computeIfAbsent(cmd.sequenceNr,
+                                                        f -> createTransaction(null, cmd.sequenceNr, null, ActorRef.noSender()));
             t.tell(cmd, ActorRef.noSender());
         } else {
             unhandled(message);

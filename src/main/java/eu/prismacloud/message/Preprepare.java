@@ -1,8 +1,3 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package eu.prismacloud.message;
 
 /**
@@ -11,20 +6,23 @@ package eu.prismacloud.message;
  */
 public class Preprepare extends ReplicaCommand {
     
-    private final int sequenceNr;
+    public final int sequenceNr;
     
-    private final int clientSequence;
+    public final int clientSequence;
     
-    public Preprepare(int sequenceNr, int clientSequence) {
+    public final int view;
+    
+    public final byte[] digest;
+    
+    public final byte[] mac;
+    
+    public static final byte[] command = "PREPREPARE".getBytes();
+    
+    Preprepare(int sequenceNr, int clientSequence, int view, byte[] digest, byte[] mac) {
         this.sequenceNr = sequenceNr;
         this.clientSequence = clientSequence;
-    }
-    
-    public int getSequenceNr() {
-        return this.sequenceNr;
-    }
-    
-    public int getClientSequence() {
-        return this.clientSequence;
+        this.view = view;
+        this.digest = digest;
+        this.mac = mac;
     }
 }

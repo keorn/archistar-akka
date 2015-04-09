@@ -1,8 +1,3 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package eu.prismacloud.message;
 
 /**
@@ -11,13 +6,20 @@ package eu.prismacloud.message;
  */
 public class Prepare {
     
-    private final int sequenceNr;
+    public final int sequenceNr;
     
-    public Prepare(int sequenceNr) {
+    public final int view;
+    
+    public final byte[] digest;
+    
+    public final byte[] mac;
+    
+    public final static byte[] command = "PREPARE".getBytes();
+    
+    Prepare(int sequenceNr, int view, byte[] digest, byte[] mac) {
         this.sequenceNr = sequenceNr;
-    }
-    
-    public int getSequenceNr() {
-        return this.sequenceNr;
+        this.view = view;
+        this.digest= digest;
+        this.mac = mac;
     }
 }

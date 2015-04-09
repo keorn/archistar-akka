@@ -7,13 +7,16 @@ import akka.dispatch.Futures;
 import akka.pattern.Patterns;
 import akka.testkit.JavaTestKit;
 import akka.util.Timeout;
-import eu.prismacloud.message.ClientCommand;
 import eu.prismacloud.message.Configure;
+import eu.prismacloud.message.MessageBuilder;
+import eu.prismacloud.message.PseudoKeyManager;
+import java.security.Security;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -32,6 +35,10 @@ public class AppTest {
     @BeforeClass
     public static void setup() {
         system = ActorSystem.create("System_1");
+        
+        //Security.insertProviderAt(new BouncyCastleProvider(), 1);
+        
+        PseudoKeyManager.keyFromTo("abc", "def");
         
         replicas = new HashSet<>();
         replicas.add(system.actorOf(Replica.props(1, true), "main-actor-1"));
@@ -60,8 +67,8 @@ public class AppTest {
                     final Timeout timeout = new Timeout(Duration.create(3, "seconds"));
                     
                     final ArrayList<Future<Object>> promises = new ArrayList<>();
-                    
-                    replicas.parallelStream().forEach(ref -> promises.add(Patterns.ask(ref, new ClientCommand(1, "fubar"), timeout)));
+   
+                    replicas.parallelStream().forEach(ref -> promises.add(Patterns.ask(ref, MessageBuilder.createRequest(ref.path().name(), 1, "fubar"), timeout)));
                     
                     final Future<Iterable<Object>> aggregate = Futures.sequence(promises, system.dispatcher());
                     

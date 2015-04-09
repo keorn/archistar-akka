@@ -8,6 +8,7 @@ import akka.japi.Creator;
 import eu.prismacloud.message.ClientCommand;
 import eu.prismacloud.message.Commit;
 import eu.prismacloud.message.Execute;
+import eu.prismacloud.message.MessageBuilder;
 import eu.prismacloud.message.Prepare;
 import eu.prismacloud.message.Preprepare;
 import java.util.HashSet;
@@ -46,19 +47,21 @@ public class Transaction extends UntypedActor {
     
     private final int replicaId;
         
-    private boolean prepreparedReceived = false;
+    private Preprepare preprepare;
+    
+    private final int viewNr = 1;
 
-    public static Props props(boolean primary, boolean prepreparedReceived, int replicaId, ActorRef executor, Set<ActorSelection> peers, int f, int sequenceNr, ClientCommand cmd, final ActorRef client) {
+    public static Props props(boolean primary, Preprepare preprepare, int replicaId, ActorRef executor, Set<ActorSelection> peers, int f, int sequenceNr, ClientCommand cmd, final ActorRef client) {
         return Props.create(new Creator<Transaction>() {
            @Override
            public Transaction create() throws Exception {
                 System.err.println("replica " + replicaId + " set CLIENT to " +client);
-               return new Transaction(primary, prepreparedReceived, replicaId, executor, peers, f, sequenceNr, cmd, client);
+               return new Transaction(primary, preprepare, replicaId, executor, peers, f, sequenceNr, cmd, client);
            }
         });
     }
     
-    private Transaction(boolean primary, boolean prepreparedReceived, int replicaId, ActorRef executor, Set<ActorSelection> peers, int f, int sequenceNr, ClientCommand cmd, ActorRef client) {
+    private Transaction(boolean primary, Preprepare preprepare, int replicaId, ActorRef executor, Set<ActorSelection> peers, int f, int sequenceNr, ClientCommand cmd, ActorRef client) {
         this.fCount = f;
         this.client = client;
         this.sequenceNr = sequenceNr;
@@ -68,17 +71,21 @@ public class Transaction extends UntypedActor {
         this.commitCommands = new HashSet<>();
         this.executor = executor;
         this.replicaId = replicaId;
-        this.prepreparedReceived  = true;
+        this.preprepare = preprepare;
  
         if (primary) {
             System.err.println("replica " + replicaId + " init as PREPARED");
             state = STATE.PREPARED;
-            assert(prepreparedReceived == true);
-            sendMessageToPeers(new Preprepare(sequenceNr, cmd.getSequenceId()));
-        } else if (!primary && prepreparedReceived) {
+            //sendMessageToPeers(new Preprepare(sequenceNr, cmd.sequenceId));
+            this.preprepare = MessageBuilder.crateFakeSelfPreprepare(sequenceNr, viewNr, cmd);
+            peers.parallelStream()
+                 .forEach(x -> x.tell(MessageBuilder.createPreprepare(x.pathString(), sequenceNr, cmd), getSelf()));
+        } else if (!primary && (preprepare != null)) {
             System.err.println("replica " + replicaId + " init as PREPREPARED");
             state = STATE.PREPREPARED;
-            sendMessageToPeers(new Prepare(this.sequenceNr));
+            //sendMessageToPeers(new Prepare(this.sequenceNr));
+            peers.parallelStream()
+                 .forEach(x -> x.tell(MessageBuilder.createPrepare(x.pathString(), this.preprepare), getSelf()));
         } else {
             System.err.println("replica " + replicaId + " init as INITIALIZING");
             state = STATE.INITIALIZING;
@@ -91,20 +98,25 @@ public class Transaction extends UntypedActor {
     }
     
     private void checkState() {
-        if (state == STATE.INITIALIZING && prepreparedReceived && clientCommand != null) {
+        if (state == STATE.INITIALIZING && (preprepare != null) && clientCommand != null) {
             System.err.println("replica " + replicaId + " INIT -> PREPREPARED, sending PREPARE message");
             state = STATE.PREPREPARED;
-            sendMessageToPeers(new Prepare(this.sequenceNr));
+            //sendMessageToPeers(new Prepare(this.sequenceNr));
+            assert(this.preprepare != null);
+            peers.parallelStream()
+                 .forEach(x -> x.tell(MessageBuilder.createPrepare(x.pathString(), this.preprepare), getSelf()));
         }
         if (state == STATE.PREPREPARED && prepareCommands.size() == 2*fCount) {
             System.err.println("replica " + replicaId + " PREPREPARED -> PREPARED, sending PREPARE message");
-            commitCommands.add(new Commit(sequenceNr));
-            sendMessageToPeers(new Commit(sequenceNr));
+            commitCommands.add(MessageBuilder.createCommit("self", sequenceNr, viewNr));
+            //sendMessageToPeers(new Commit(sequenceNr));
+            peers.parallelStream()
+                 .forEach(x -> x.tell(MessageBuilder.createCommit(x.pathString(), sequenceNr, viewNr), getSelf()));
             state = STATE.PREPARED;
         }
         if (state == STATE.PREPARED && commitCommands.size() == (2*fCount + 1)) {
             System.err.println("replica " + replicaId + " PREPARED -> EXECUTE");
-            this.executor.tell(new Execute(sequenceNr, this.clientCommand.getCommand()), this.client);
+            this.executor.tell(new Execute(sequenceNr, this.clientCommand.operation), this.client);
         }
     }
     
@@ -119,7 +131,7 @@ public class Transaction extends UntypedActor {
             this.client = getSender();
             checkState();
         } else if (o instanceof Preprepare) {
-            this.prepreparedReceived = true;
+            this.preprepare = (Preprepare)o;
             checkState();
         } else if (o instanceof Prepare) {
             prepareCommands.add((Prepare)o);
