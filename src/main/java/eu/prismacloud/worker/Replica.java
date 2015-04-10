@@ -48,6 +48,9 @@ public class Replica extends UntypedActor {
         
         if (message instanceof ClientCommand) {
             ClientCommand cmd = (ClientCommand)message;
+            
+            MessageBuilder.validate(cmd);
+            
             if (this.isMaster()) {
                 int newSeq = ++seqCounter;
                 ActorRef t = createTransaction(cmd, newSeq, MessageBuilder.crateFakeSelfPreprepare(newSeq, viewNr, cmd), getSender());
@@ -64,7 +67,9 @@ public class Replica extends UntypedActor {
                 }
             }
         } else if (message instanceof Preprepare) {
-            Preprepare cmd = (Preprepare)message;            
+            Preprepare cmd = (Preprepare)message;
+            
+            MessageBuilder.validate(cmd);
             
             if (transactionMap.containsKey(cmd.sequenceNr)) {
                 ActorRef t = transactionMap.get(cmd.clientSequence);
@@ -83,11 +88,17 @@ public class Replica extends UntypedActor {
             }
         } else if (message instanceof Prepare) {
             Prepare cmd = (Prepare)message;
+            
+            MessageBuilder.validate(cmd);
+            
             ActorRef t = transactionMap.computeIfAbsent(cmd.sequenceNr,
                                                         f -> createTransaction(null, cmd.sequenceNr, null, ActorRef.noSender()));
             t.tell(cmd, ActorRef.noSender());
         } else if (message instanceof Commit) {
             Commit cmd = (Commit)message;
+            
+            MessageBuilder.validate(cmd);
+            
             ActorRef t = transactionMap.computeIfAbsent(cmd.sequenceNr,
                                                         f -> createTransaction(null, cmd.sequenceNr, null, ActorRef.noSender()));
             t.tell(cmd, ActorRef.noSender());

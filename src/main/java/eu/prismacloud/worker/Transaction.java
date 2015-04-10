@@ -125,6 +125,8 @@ public class Transaction extends UntypedActor {
         
         System.err.println("Transaction[" + replicaId + "|" + sequenceNr + "] got message " + o);
         
+        /* TODO: should we re-check messages here? */
+        
         if (o instanceof ClientCommand) {
             this.clientCommand = (ClientCommand)o;
             System.err.println("replica " + replicaId + " set CLIENT (through client command) to " +client);
