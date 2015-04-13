@@ -9,6 +9,7 @@ import akka.japi.Procedure;
 import eu.prismacloud.message.ClientCommand;
 import eu.prismacloud.message.Commit;
 import eu.prismacloud.message.Configure;
+import eu.prismacloud.message.CreateTransaction;
 import eu.prismacloud.message.MessageBuilder;
 import eu.prismacloud.message.Prepare;
 import eu.prismacloud.message.Preprepare;
@@ -31,19 +32,12 @@ public class Replica extends UntypedActor {
     
     private final HashMap<Integer, ClientCommand> clientMap = new HashMap<>();
     
-    private final HashMap<Integer, ActorRef> clientRefMap = new HashMap<>();
-    
-    private final HashMap<Integer, ActorRef> transactionMapClient = new HashMap<>();
+    private final HashMap<Integer, Preprepare> preprepareMap = new HashMap<>();
     
     private final ActorRef executor;
     
     private final int viewNr = 1;
     
-    private ActorRef createTransaction(ClientCommand cmd, int seq, Preprepare preprepare, ActorRef sender) {
-        return getContext().actorOf(Transaction.props(isMaster(), preprepare, replicaId, executor, peers, fCount, seq, cmd, sender),
-                                    "transaction-" + viewNr + "-" + seq);
-    }
-        
     /**
      * creates a transaction and forwards the message to the transaction
      */
@@ -53,71 +47,57 @@ public class Replica extends UntypedActor {
             ClientCommand cmd = (ClientCommand)message;
             
             MessageBuilder.validate(cmd);
+            cmd.setSender(getSender());
             
             if (this.isMaster()) {
                 int newSeq = ++seqCounter;
-                ActorRef t = createTransaction(cmd, newSeq, MessageBuilder.crateFakeSelfPreprepare(newSeq, viewNr, cmd), getSender());
-                transactionMapClient.put(cmd.sequenceId, t);
+                getViewFor(viewNr).tell(new CreateTransaction(MessageBuilder.crateFakeSelfPreprepare(newSeq, viewNr, cmd),
+                                                              fCount, cmd), getSender());
             } else {
                 /* was the client id already mentioned before? */
-                if (transactionMapClient.containsKey(cmd.sequenceId)) {
-                    transactionMapClient.get(cmd.sequenceId).tell(cmd, getSender());
+                if (preprepareMap.containsKey(cmd.sequenceId)) {
+                   getViewFor(viewNr).tell(new CreateTransaction(preprepareMap.remove(cmd.sequenceId),
+                                                                 fCount, cmd), getSender()); 
                 } else {
-                    /* cannot create transaction without sequence count */
                     clientMap.put(cmd.sequenceId, cmd);
-                    clientRefMap.put(cmd.sequenceId, getSender());
                 }
             }
         } else if (message instanceof Preprepare) {
             Preprepare cmd = (Preprepare)message;
-            
             MessageBuilder.validate(cmd);
             
-            final Option<ActorRef> child = getContext().child("transaction-" + cmd.view + "-" + cmd.sequenceNr);
-            if (child.isDefined()) {
-                ActorRef t = child.get();
-                transactionMapClient.put(cmd.clientSequence, t);
-                
-                t.tell(cmd, ActorRef.noSender());
-                if (clientMap.containsKey(cmd.clientSequence)) {
-                    ClientCommand cCmd = clientMap.remove(cmd.clientSequence);
-                    t.tell(cCmd, clientRefMap.remove(cmd.clientSequence));
-                }
+            if (isMaster()) {
+                assert(false);
+            }
+            
+            if (clientMap.containsKey(cmd.clientSequence)) {
+                getViewFor(viewNr).tell(new CreateTransaction(cmd, fCount,
+                                                              clientMap.remove(cmd.clientSequence)), getSender()); 
             } else {
-                ClientCommand cCmd = clientMap.remove(cmd.clientSequence);
-                ActorRef t = createTransaction(cCmd, cCmd.sequenceId, cmd, clientRefMap.remove(cmd.clientSequence));
-                transactionMapClient.put(cmd.clientSequence, t);
+                preprepareMap.put(cmd.sequenceNr, cmd);
             }
         } else if (message instanceof Prepare) {
             Prepare cmd = (Prepare)message;
-            
             MessageBuilder.validate(cmd);
-
-            /* why is option.getOrElse not working? */
-            final Option<ActorRef> child = getContext().child("transaction-" + cmd.view + "-" + cmd.sequenceNr);
-            if (child.isDefined()) {
-                child.get().tell(cmd, ActorRef.noSender());
-            } else {
-                ActorRef f = createTransaction(null, cmd.sequenceNr, null, ActorRef.noSender());
-                f.tell(cmd, ActorRef.noSender());
-            }
-        } else if (message instanceof Commit) {
+            getViewFor(cmd.view).tell(cmd, ActorRef.noSender());
+       } else if (message instanceof Commit) {
             Commit cmd = (Commit)message;
-            
             MessageBuilder.validate(cmd);
-            
-            /* why is option.getOrElse not working? */
-            final Option<ActorRef> child = getContext().child("transaction-" + cmd.view + "-" + cmd.sequenceNr);
-            if (child.isDefined()) {
-                child.get().tell(cmd, ActorRef.noSender());
-            } else {
-                ActorRef f = createTransaction(null, cmd.sequenceNr, null, ActorRef.noSender());
-                f.tell(cmd, ActorRef.noSender());
-            }
+            getViewFor(cmd.view).tell(cmd, ActorRef.noSender());
         } else {
             unhandled(message);
         }
     };
+    
+    private ActorRef getViewFor(int viewNr) {
+        final Option<ActorRef> child = getContext().child("view-" + viewNr);
+        if (child.isDefined()) {
+            return child.get();
+        } else {
+            assert(false);
+            return null;
+        }
+    }
     
     private boolean isMaster() {
         return this.master;
@@ -147,6 +127,10 @@ public class Replica extends UntypedActor {
                                      .map(f -> context().actorSelection(f))
                                      .collect(Collectors.toSet());
             
+            /* BUG: should we wait until the View is ready? */
+            /* TODO: there should be only one active view -> can't we check against this? */
+            getContext().actorOf(View.props(viewNr, isMaster(), replicaId, executor, peers), "view-" + viewNr);
+
             /* become "normal" listener loop */
             getContext().become(configured);
         } else {

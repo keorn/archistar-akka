@@ -52,54 +52,41 @@ public class Transaction extends UntypedActor {
     private Preprepare preprepare;
     
     private final int viewNr = 1;
+    
+    private final boolean primary;
 
-    public static Props props(boolean primary, Preprepare preprepare, int replicaId, ActorRef executor, Set<ActorSelection> peers, int f, int sequenceNr, ClientCommand cmd, final ActorRef client) {
+    public static Props props(boolean primary, int replicaId, ActorRef executor, Set<ActorSelection> peers, int f, int sequenceNr) {
         return Props.create(new Creator<Transaction>() {
            @Override
            public Transaction create() throws Exception {
-               System.err.println("replica " + replicaId + " set CLIENT to " +client);
-               return new Transaction(primary, preprepare, replicaId, executor, peers, f, sequenceNr, cmd, client);
+               return new Transaction(primary, replicaId, executor, peers, f, sequenceNr);
            }
         });
     }
     
-    private Transaction(boolean primary, Preprepare preprepare, int replicaId, ActorRef executor, Set<ActorSelection> peers, int f, int sequenceNr, ClientCommand cmd, ActorRef client) {
+    private Transaction(boolean primary, int replicaId, ActorRef executor, Set<ActorSelection> peers, int f, int sequenceNr) {
         this.fCount = f;
-        this.client = client;
         this.sequenceNr = sequenceNr;
-        this.clientCommand = cmd;
         this.peers = peers;
         this.prepareCommands = new HashSet<>();
         this.commitCommands = new HashSet<>();
         this.executor = executor;
         this.replicaId = replicaId;
-        this.preprepare = preprepare;
- 
-        if (primary) {
-            System.err.println("replica " + replicaId + " init as PREPARED");
-            state = STATE.PREPARED;
-            //sendMessageToPeers(new Preprepare(sequenceNr, cmd.sequenceId));
-            this.preprepare = MessageBuilder.crateFakeSelfPreprepare(sequenceNr, viewNr, cmd);
-            peers.parallelStream()
-                 .forEach(x -> x.tell(MessageBuilder.createPreprepare(x.pathString(), sequenceNr, cmd), getSelf()));
-        } else if (!primary && (preprepare != null)) {
-            System.err.println("replica " + replicaId + " init as PREPREPARED");
-            state = STATE.PREPREPARED;
-            //sendMessageToPeers(new Prepare(this.sequenceNr));
-            peers.parallelStream()
-                 .forEach(x -> x.tell(MessageBuilder.createPrepare(x.pathString(), this.preprepare), getSelf()));
-        } else {
-            System.err.println("replica " + replicaId + " init as INITIALIZING");
-            state = STATE.INITIALIZING;
-        }
-    }
-    
-    private void sendMessageToPeers(Object message) {
-        peers.parallelStream()
-             .forEach(f -> f.tell(message, getSelf()));
+        this.state = STATE.INITIALIZING;
+        this.primary = primary;
+        
+        System.err.println("replica " + replicaId + " init as INITIALIZING");
     }
     
     private void checkState() {
+        if (primary && state == STATE.INITIALIZING && clientCommand != null) {
+            System.err.println("replica " + replicaId + " INIT -> PREPARED(master)");
+            state = STATE.PREPARED;
+            //sendMessageToPeers(new Preprepare(sequenceNr, cmd.sequenceId));
+            this.preprepare = MessageBuilder.crateFakeSelfPreprepare(sequenceNr, viewNr, clientCommand);
+            peers.parallelStream()
+                 .forEach(x -> x.tell(MessageBuilder.createPreprepare(x.pathString(), sequenceNr, clientCommand), getSelf()));
+        }
         if (state == STATE.INITIALIZING && (preprepare != null) && clientCommand != null) {
             System.err.println("replica " + replicaId + " INIT -> PREPREPARED, sending PREPARE message");
             state = STATE.PREPREPARED;
@@ -131,7 +118,6 @@ public class Transaction extends UntypedActor {
         
         if (o instanceof ClientCommand) {
             this.clientCommand = (ClientCommand)o;
-            System.err.println("replica " + replicaId + " set CLIENT (through client command) to " +client);
             this.client = getSender();
             checkState();
         } else if (o instanceof Preprepare) {
