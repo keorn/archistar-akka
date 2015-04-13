@@ -7,6 +7,8 @@ import eu.prismacloud.message.Execute;
 
 /**
  *
+ * TODO: sequence numbers must be dense
+ * 
  * @author andy
  */
 public class Executor extends UntypedActor {

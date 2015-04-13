@@ -16,6 +16,8 @@ import java.util.Set;
 
 /**
  *
+ * TODO: can I use akka FSM for this?
+ * 
  * @author andy
  */
 public class Transaction extends UntypedActor {
@@ -55,7 +57,7 @@ public class Transaction extends UntypedActor {
         return Props.create(new Creator<Transaction>() {
            @Override
            public Transaction create() throws Exception {
-                System.err.println("replica " + replicaId + " set CLIENT to " +client);
+               System.err.println("replica " + replicaId + " set CLIENT to " +client);
                return new Transaction(primary, preprepare, replicaId, executor, peers, f, sequenceNr, cmd, client);
            }
         });

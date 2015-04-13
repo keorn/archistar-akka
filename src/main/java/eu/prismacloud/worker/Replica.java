@@ -15,6 +15,7 @@ import eu.prismacloud.message.Preprepare;
 import java.util.HashMap;
 import java.util.Set;
 import java.util.stream.Collectors;
+import scala.Option;
 
 public class Replica extends UntypedActor {
     
@@ -32,8 +33,6 @@ public class Replica extends UntypedActor {
     
     private final HashMap<Integer, ActorRef> clientRefMap = new HashMap<>();
     
-    private final HashMap<Integer, ActorRef> transactionMap = new HashMap<>();
-    
     private final HashMap<Integer, ActorRef> transactionMapClient = new HashMap<>();
     
     private final ActorRef executor;
@@ -41,9 +40,13 @@ public class Replica extends UntypedActor {
     private final int viewNr = 1;
     
     private ActorRef createTransaction(ClientCommand cmd, int seq, Preprepare preprepare, ActorRef sender) {
-        return getContext().actorOf(Transaction.props(isMaster(), preprepare, replicaId, executor, peers, fCount, seq, cmd, sender));
+        return getContext().actorOf(Transaction.props(isMaster(), preprepare, replicaId, executor, peers, fCount, seq, cmd, sender),
+                                    "transaction-" + viewNr + "-" + seq);
     }
-    
+        
+    /**
+     * creates a transaction and forwards the message to the transaction
+     */
     private Procedure<Object> configured = (Object message) -> {
         
         if (message instanceof ClientCommand) {
@@ -54,7 +57,6 @@ public class Replica extends UntypedActor {
             if (this.isMaster()) {
                 int newSeq = ++seqCounter;
                 ActorRef t = createTransaction(cmd, newSeq, MessageBuilder.crateFakeSelfPreprepare(newSeq, viewNr, cmd), getSender());
-                transactionMap.put(seqCounter, t);
                 transactionMapClient.put(cmd.sequenceId, t);
             } else {
                 /* was the client id already mentioned before? */
@@ -71,8 +73,9 @@ public class Replica extends UntypedActor {
             
             MessageBuilder.validate(cmd);
             
-            if (transactionMap.containsKey(cmd.sequenceNr)) {
-                ActorRef t = transactionMap.get(cmd.clientSequence);
+            final Option<ActorRef> child = getContext().child("transaction-" + cmd.view + "-" + cmd.sequenceNr);
+            if (child.isDefined()) {
+                ActorRef t = child.get();
                 transactionMapClient.put(cmd.clientSequence, t);
                 
                 t.tell(cmd, ActorRef.noSender());
@@ -83,25 +86,34 @@ public class Replica extends UntypedActor {
             } else {
                 ClientCommand cCmd = clientMap.remove(cmd.clientSequence);
                 ActorRef t = createTransaction(cCmd, cCmd.sequenceId, cmd, clientRefMap.remove(cmd.clientSequence));
-                transactionMap.put(cmd.sequenceNr, t);
                 transactionMapClient.put(cmd.clientSequence, t);
             }
         } else if (message instanceof Prepare) {
             Prepare cmd = (Prepare)message;
             
             MessageBuilder.validate(cmd);
-            
-            ActorRef t = transactionMap.computeIfAbsent(cmd.sequenceNr,
-                                                        f -> createTransaction(null, cmd.sequenceNr, null, ActorRef.noSender()));
-            t.tell(cmd, ActorRef.noSender());
+
+            /* why is option.getOrElse not working? */
+            final Option<ActorRef> child = getContext().child("transaction-" + cmd.view + "-" + cmd.sequenceNr);
+            if (child.isDefined()) {
+                child.get().tell(cmd, ActorRef.noSender());
+            } else {
+                ActorRef f = createTransaction(null, cmd.sequenceNr, null, ActorRef.noSender());
+                f.tell(cmd, ActorRef.noSender());
+            }
         } else if (message instanceof Commit) {
             Commit cmd = (Commit)message;
             
             MessageBuilder.validate(cmd);
             
-            ActorRef t = transactionMap.computeIfAbsent(cmd.sequenceNr,
-                                                        f -> createTransaction(null, cmd.sequenceNr, null, ActorRef.noSender()));
-            t.tell(cmd, ActorRef.noSender());
+            /* why is option.getOrElse not working? */
+            final Option<ActorRef> child = getContext().child("transaction-" + cmd.view + "-" + cmd.sequenceNr);
+            if (child.isDefined()) {
+                child.get().tell(cmd, ActorRef.noSender());
+            } else {
+                ActorRef f = createTransaction(null, cmd.sequenceNr, null, ActorRef.noSender());
+                f.tell(cmd, ActorRef.noSender());
+            }
         } else {
             unhandled(message);
         }
