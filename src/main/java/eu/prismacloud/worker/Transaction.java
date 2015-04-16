@@ -22,7 +22,7 @@ import java.util.Set;
  */
 public class Transaction extends UntypedActor {
     
-    private enum STATE {
+    public static enum STATE {
         INITIALIZING,
         PREPREPARED,
         PREPARED,
@@ -136,5 +136,9 @@ public class Transaction extends UntypedActor {
     
     public int getSequenceNr() {
         return this.sequenceNr;
+    }
+    
+    STATE getState() {
+        return this.state;
     }
 }
