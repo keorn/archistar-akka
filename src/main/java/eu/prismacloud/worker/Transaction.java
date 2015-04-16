@@ -79,6 +79,9 @@ public class Transaction extends UntypedActor {
     }
     
     private void checkState() {
+        
+        System.err.println("state: " + state + " commit-msg#: " + commitCommands.size());
+        
         if (primary && state == STATE.INITIALIZING && clientCommand != null) {
             System.err.println("replica " + replicaId + " INIT -> PREPARED(master)");
             state = STATE.PREPARED;
@@ -91,12 +94,11 @@ public class Transaction extends UntypedActor {
             System.err.println("replica " + replicaId + " INIT -> PREPREPARED, sending PREPARE message");
             state = STATE.PREPREPARED;
             //sendMessageToPeers(new Prepare(this.sequenceNr));
-            assert(this.preprepare != null);
             peers.parallelStream()
                  .forEach(x -> x.tell(MessageBuilder.createPrepare(x.pathString(), this.preprepare), getSelf()));
         }
         if (state == STATE.PREPREPARED && prepareCommands.size() == 2*fCount) {
-            System.err.println("replica " + replicaId + " PREPREPARED -> PREPARED, sending PREPARE message");
+            System.err.println("replica " + replicaId + " PREPREPARED -> PREPARED, sending COMMIT message");
             commitCommands.add(MessageBuilder.createCommit("self", sequenceNr, viewNr));
             //sendMessageToPeers(new Commit(sequenceNr));
             peers.parallelStream()
@@ -105,6 +107,7 @@ public class Transaction extends UntypedActor {
         }
         if (state == STATE.PREPARED && commitCommands.size() == (2*fCount + 1)) {
             System.err.println("replica " + replicaId + " PREPARED -> EXECUTE");
+            state = STATE.COMMITED;
             this.executor.tell(new Execute(sequenceNr, this.clientCommand.operation), this.client);
         }
     }
