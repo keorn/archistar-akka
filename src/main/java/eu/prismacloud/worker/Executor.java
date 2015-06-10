@@ -7,12 +7,13 @@ import akka.event.Logging;
 import akka.event.LoggingAdapter;
 import akka.japi.Creator;
 import eu.prismacloud.message.Execute;
+import eu.prismacloud.message.ExecutionCompleted;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
  *
- * TODO: sequence numbers must be dense
+ * sequence numbers must be dense
  * 
  * @author andy
  */
@@ -42,10 +43,10 @@ public class Executor extends UntypedActor {
     }
     
     private void execute(Execute cmd, ActorRef sender) {
-        log.info("replica[" + replicaId + "|" + cmd.getSequenceNr() + " EXECUTE " + cmd.getCommand());
+        log.info("replica[" + replicaId + "|" + cmd.sequenceNr + " EXECUTE " + cmd.command);
         lastExecuted++;
         log.info("sending message back to " + sender);
-        getSender().tell("something was executed", getSelf());        
+        sender.tell(new ExecutionCompleted(cmd.sequenceNr), ActorRef.noSender());
     }
     
     @Override
@@ -53,7 +54,7 @@ public class Executor extends UntypedActor {
         if (o instanceof Execute) {
             Execute cmd = (Execute)o;
             
-            if (cmd.getSequenceNr() == lastExecuted + 1) {
+            if (cmd.sequenceNr == lastExecuted + 1) {
                 /* command sequence numbers are dense */
                 execute(cmd, getSender());
                 
@@ -63,12 +64,12 @@ public class Executor extends UntypedActor {
                     cmdQueue.remove(lastExecuted);
                     cmdSender.remove(lastExecuted);
                 }
-            } else if (cmd.getSequenceNr() > lastExecuted) {
-                log.warning("queuing message " + cmd.getSequenceNr());
-                cmdQueue.put(cmd.getSequenceNr(), cmd);
-                cmdSender.put(cmd.getSequenceNr(), getSender());
+            } else if (cmd.sequenceNr > lastExecuted) {
+                log.warning("queuing message " + cmd.sequenceNr);
+                cmdQueue.put(cmd.sequenceNr, cmd);
+                cmdSender.put(cmd.sequenceNr, getSender());
             } else {
-                log.warning("discarding message " + cmd.getSequenceNr());
+                log.warning("discarding message " + cmd.sequenceNr);
             }
         } else {
             unhandled(o);

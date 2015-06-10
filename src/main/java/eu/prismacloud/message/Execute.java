@@ -10,20 +10,13 @@ package eu.prismacloud.message;
  * @author andy
  */
 public class Execute {
-    private final int sequenceNr;
     
-    private final String command;
+    public final int sequenceNr;
+    
+    public final String command;
     
     public Execute(int sequenceNr, String command) {
         this.command = command;
         this.sequenceNr = sequenceNr;
-    }
-    
-    public int getSequenceNr() {
-        return this.sequenceNr;
-    }
-    
-    public String getCommand() {
-        return this.command;
     }
 }

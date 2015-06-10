@@ -10,6 +10,7 @@ import akka.japi.Creator;
 import eu.prismacloud.message.ClientCommand;
 import eu.prismacloud.message.Commit;
 import eu.prismacloud.message.Execute;
+import eu.prismacloud.message.ExecutionCompleted;
 import eu.prismacloud.message.MessageBuilder;
 import eu.prismacloud.message.Prepare;
 import eu.prismacloud.message.Preprepare;
@@ -112,7 +113,7 @@ public class Transaction extends UntypedActor {
         if (state == STATE.PREPARED && commitCommands.size() == (2*fCount + 1)) {
             log.debug("replica " + replicaId + " PREPARED -> EXECUTE");
             state = STATE.COMMITED;
-            this.executor.tell(new Execute(sequenceNr, this.clientCommand.operation), this.client);
+            this.executor.tell(new Execute(sequenceNr, this.clientCommand.operation), getSelf());
         }
     }
     
@@ -136,13 +137,17 @@ public class Transaction extends UntypedActor {
         } else if (o instanceof Commit) {
             commitCommands.add((Commit)o);
             checkState();
+        } else if (o instanceof ExecutionCompleted) {
+            this.client.tell("something should have been executed", getSelf());
+            stop();
         } else {
             unhandled(o);
         }
     }
     
-    public int getSequenceNr() {
-        return this.sequenceNr;
+    private void stop() {
+        log.info("stopping actor");
+        getContext().stop(getSelf());
     }
     
     STATE getState() {

@@ -1,7 +1,5 @@
 package eu.prismacloud.message;
 
-import akka.actor.ActorRef;
-
 /**
  *
  * @author andy
