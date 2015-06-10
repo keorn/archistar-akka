@@ -1,27 +1,31 @@
 package eu.prismacloud.worker;
 
 import akka.actor.ActorRef;
-import akka.actor.ActorSelection;
 import akka.actor.Props;
 import akka.actor.UntypedActor;
 import akka.japi.Creator;
 import akka.japi.Procedure;
+import eu.prismacloud.message.CheckPoint;
 import eu.prismacloud.message.ClientCommand;
-import eu.prismacloud.message.Commit;
+import eu.prismacloud.message.CommonMessageBuilder;
 import eu.prismacloud.message.Configure;
 import eu.prismacloud.message.CreateTransaction;
-import eu.prismacloud.message.MessageBuilder;
-import eu.prismacloud.message.Prepare;
-import eu.prismacloud.message.Preprepare;
+import eu.prismacloud.message.execution.ExecutedWithState;
+import eu.prismacloud.message.ExecutorReady;
+import eu.prismacloud.message.RemoteReplicasReady;
+import eu.prismacloud.message.ViewReady;
+import eu.prismacloud.message.replica.Commit;
+import eu.prismacloud.message.replica.Prepare;
+import eu.prismacloud.message.replica.Preprepare;
+import eu.prismacloud.message.replica.PreprepareBuilder;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 import scala.Option;
 
 public class Replica extends UntypedActor {
-    
-    private Set<ActorSelection> peers;
-    
+        
     private final int replicaId;
     
     private final int fCount = 1;
@@ -36,6 +40,8 @@ public class Replica extends UntypedActor {
     
     private final ActorRef executor;
     
+    private ActorRef remoteReplicas;
+    
     private final int viewNr = 1;
     
     /**
@@ -43,15 +49,17 @@ public class Replica extends UntypedActor {
      */
     private Procedure<Object> configured = (Object message) -> {
         
+        System.err.println("replcia " + getReplicaId() + " message: " + message);
+        
         if (message instanceof ClientCommand) {
             ClientCommand cmd = (ClientCommand)message;
             
-            MessageBuilder.validate(cmd);
+            CommonMessageBuilder.validate(cmd);
             cmd.setSender(getSender());
             
             if (this.isMaster()) {
                 int newSeq = ++seqCounter;
-                getViewFor(viewNr).tell(new CreateTransaction(MessageBuilder.crateFakeSelfPreprepare(newSeq, viewNr, cmd),
+                getViewFor(viewNr).tell(new CreateTransaction(new PreprepareBuilder(newSeq, viewNr, cmd).buildFakeSelfPreprepare(),
                                                               fCount, cmd), getSender());
             } else {
                 /* was the client id already mentioned before? */
@@ -64,7 +72,7 @@ public class Replica extends UntypedActor {
             }
         } else if (message instanceof Preprepare) {
             Preprepare cmd = (Preprepare)message;
-            MessageBuilder.validate(cmd);
+            CommonMessageBuilder.validate(cmd);
             
             if (isMaster()) {
                 assert(false);
@@ -78,17 +86,24 @@ public class Replica extends UntypedActor {
             }
         } else if (message instanceof Prepare) {
             Prepare cmd = (Prepare)message;
-            MessageBuilder.validate(cmd);
+            CommonMessageBuilder.validate(cmd);
             getViewFor(cmd.view).tell(cmd, ActorRef.noSender());
        } else if (message instanceof Commit) {
             Commit cmd = (Commit)message;
-            MessageBuilder.validate(cmd);
+            CommonMessageBuilder.validate(cmd);
             getViewFor(cmd.view).tell(cmd, ActorRef.noSender());
+        } else if (message instanceof ExecutedWithState) {
+            ExecutedWithState cmd = (ExecutedWithState)message;
+            CheckPoint cp = new CheckPoint(cmd.sequenceNr, cmd.stateDigest, null);
+            addCheckpoint(cp);
+            remoteReplicas.tell(cp, ActorRef.noSender());
         } else {
             unhandled(message);
         }
     };
     
+    private final HashMap<Integer, Set<CheckPoint>> checkpoints = new HashMap<>();
+        
     private ActorRef getViewFor(int viewNr) {
         final Option<ActorRef> child = getContext().child("view-" + viewNr);
         if (child.isDefined()) {
@@ -115,26 +130,80 @@ public class Replica extends UntypedActor {
     public Replica(int replicaId, boolean master) {
         this.master = master;
         this.replicaId = replicaId;
-        this.executor = getContext().actorOf(Executor.props(replicaId));
+        this.executor = getContext().actorOf(Executor.props(replicaId, getSelf()));
     }
     
     @Override
     public void onReceive(Object message) {
-        if (message instanceof Configure) {
+        if (message instanceof ExecutorReady) {
+            executorReady = true;
+        } else if (message instanceof Configure) {
             Configure config = (Configure)message;
-            peers = config.getPeers().stream()
-                                     .filter(f -> !f.equalsIgnoreCase(getSelf().path().toStringWithoutAddress()))
-                                     .map(f -> context().actorSelection(f))
-                                     .collect(Collectors.toSet());
-            
-            /* BUG: should we wait until the View is ready? */
+            remoteReplicas = getContext().actorOf(RemoteReplica.props(config.getPeers(), getSelf().path().toStringWithoutAddress()));
+                        
             /* TODO: there should be only one active view -> can't we check against this? */
-            getContext().actorOf(View.props(viewNr, isMaster(), replicaId, executor, peers), "view-" + viewNr);
-
+            getContext().actorOf(View.props(viewNr, isMaster(), replicaId, executor, remoteReplicas), "view-" + viewNr);
+            
+            configurerer = getSender();
+            
             /* become "normal" listener loop */
-            getContext().become(configured);
+            System.err.println("configuring..");
+            getContext().become(configuring);
         } else {
             unhandled(message);
         }
+    }
+    
+    private ActorRef configurerer;
+    
+    private boolean executorReady = false;
+    
+    private boolean remotePeersReady = false;
+    
+    private boolean viewReady = false;
+    
+    private Procedure<Object> configuring = (Object message) -> {
+        System.err.println("received: " + message);
+        if (message instanceof ExecutorReady) {
+            executorReady = true;
+        } else if (message instanceof RemoteReplicasReady) {
+            remotePeersReady = true;
+        } else if (message instanceof ViewReady) {
+            viewReady = true;
+        } else {
+            unhandled(message);
+        }
+        
+        if (executorReady && remotePeersReady && viewReady) {
+            getContext().become(configured);
+            System.err.println("configured..");
+            configurerer.tell("configured!", ActorRef.noSender());
+        }
+    };
+
+    private void addCheckpoint(CheckPoint checkPoint) {
+        int seqNr = checkPoint.lastSequenceNr;
+        
+        if (checkpoints.containsKey(seqNr)) {
+            checkpoints.get(seqNr).add(checkPoint);
+            
+            long count = checkpoints.get(seqNr).stream().filter(x -> x.digest ==  checkPoint.digest).count();
+            if (count >= 2*fCount+1) {
+                checkpoints.keySet().stream()
+                           .filter(x -> x <= seqNr)
+                           .collect(Collectors.toSet())
+                           .forEach(x -> checkpoints.remove(x));
+            }
+            /* TODO: update watermarks */
+        } else {
+            HashSet<CheckPoint> tmp = new HashSet<>();
+            tmp.add(checkPoint);
+            
+            checkpoints.put(checkPoint.lastSequenceNr, tmp);
+        }
+    }
+    
+    public int getReplicaId() {
+        return replicaId;
     }
 }

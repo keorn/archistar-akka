@@ -1,5 +1,7 @@
 package eu.prismacloud.message;
 
+import eu.prismacloud.message.replica.Preprepare;
+
 /**
  *
  * @author andy

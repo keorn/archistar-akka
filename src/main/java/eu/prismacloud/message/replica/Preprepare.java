@@ -1,10 +1,10 @@
-package eu.prismacloud.message;
+package eu.prismacloud.message.replica;
 
 /**
  *
  * @author andy
  */
-public class Preprepare extends ReplicaCommand {
+public class Preprepare {
     
     public final int sequenceNr;
     

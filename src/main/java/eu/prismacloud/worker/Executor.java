@@ -6,8 +6,10 @@ import akka.actor.UntypedActor;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 import akka.japi.Creator;
-import eu.prismacloud.message.Execute;
-import eu.prismacloud.message.ExecutionCompleted;
+import eu.prismacloud.message.execution.Execute;
+import eu.prismacloud.message.execution.ExecutedWithState;
+import eu.prismacloud.message.execution.ExecutionCompleted;
+import eu.prismacloud.message.ExecutorReady;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -27,26 +29,41 @@ public class Executor extends UntypedActor {
     private int lastExecuted = 0;
     
     private final Map<Integer, Execute> cmdQueue = new HashMap<>();
+    
     private final Map<Integer, ActorRef> cmdSender = new HashMap<>();
     
-    static Props props(int replicaId) {
+    public static final int CHECKPOINT_INTERVAL = 128;
+    
+    private final ActorRef parent;
+    
+    static Props props(int replicaId, ActorRef parent) {
         return Props.create(new Creator<Executor>() {
            @Override
            public Executor create() throws Exception {
-               return new Executor(replicaId);
+               return new Executor(replicaId, parent);
            }
         });
     }
     
-    Executor(int replicaId) {
+    Executor(int replicaId, ActorRef parent) {
         this.replicaId = replicaId;
+        this.parent = parent;
+        
+        /* TODO: initialize storage, etc. */
+        
+        this.parent.tell(new ExecutorReady(), ActorRef.noSender());
     }
     
     private void execute(Execute cmd, ActorRef sender) {
         log.info("replica[" + replicaId + "|" + cmd.sequenceNr + " EXECUTE " + cmd.command);
         lastExecuted++;
-        log.info("sending message back to " + sender);
+        log.warning("sending message back to " + sender);
         sender.tell(new ExecutionCompleted(cmd.sequenceNr), ActorRef.noSender());
+        
+        if (lastExecuted % CHECKPOINT_INTERVAL == 0) {
+            log.warning("Sending ExecutedWithState to " + getContext().parent());
+            parent.tell(new ExecutedWithState(lastExecuted, null), getSelf());
+        }
     }
     
     @Override
