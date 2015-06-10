@@ -3,6 +3,8 @@ package eu.prismacloud.worker;
 import akka.actor.ActorRef;
 import akka.actor.Props;
 import akka.actor.UntypedActor;
+import akka.event.Logging;
+import akka.event.LoggingAdapter;
 import akka.japi.Creator;
 import eu.prismacloud.message.Execute;
 import java.util.HashMap;
@@ -17,6 +19,8 @@ import java.util.Map;
 public class Executor extends UntypedActor {
 
     private final int replicaId;
+    
+    private final LoggingAdapter log = Logging.getLogger(getContext().system(), this);
     
     /* initial message has number 1 */
     private int lastExecuted = 0;
@@ -38,9 +42,9 @@ public class Executor extends UntypedActor {
     }
     
     private void execute(Execute cmd, ActorRef sender) {
-        System.err.println("\nreplica[" + replicaId + "|" + cmd.getSequenceNr() + " EXECUTE " + cmd.getCommand());
+        log.info("replica[" + replicaId + "|" + cmd.getSequenceNr() + " EXECUTE " + cmd.getCommand());
         lastExecuted++;
-        System.err.println("sending message back to " + sender);
+        log.info("sending message back to " + sender);
         getSender().tell("something was executed", getSelf());        
     }
     
@@ -60,11 +64,11 @@ public class Executor extends UntypedActor {
                     cmdSender.remove(lastExecuted);
                 }
             } else if (cmd.getSequenceNr() > lastExecuted) {
-                System.err.println("queuing message " + cmd.getSequenceNr());
+                log.warning("queuing message " + cmd.getSequenceNr());
                 cmdQueue.put(cmd.getSequenceNr(), cmd);
                 cmdSender.put(cmd.getSequenceNr(), getSender());
             } else {
-                System.err.println("discarding message " + cmd.getSequenceNr());
+                log.warning("discarding message " + cmd.getSequenceNr());
             }
         } else {
             unhandled(o);

@@ -4,6 +4,8 @@ import akka.actor.ActorRef;
 import akka.actor.ActorSelection;
 import akka.actor.Props;
 import akka.actor.UntypedActor;
+import akka.event.Logging;
+import akka.event.LoggingAdapter;
 import akka.japi.Creator;
 import eu.prismacloud.message.ClientCommand;
 import eu.prismacloud.message.Commit;
@@ -21,6 +23,8 @@ import java.util.Set;
  * @author andy
  */
 public class Transaction extends UntypedActor {
+    
+    private final LoggingAdapter log = Logging.getLogger(getContext().system(), this);
     
     public static enum STATE {
         INITIALIZING,
@@ -75,15 +79,15 @@ public class Transaction extends UntypedActor {
         this.state = STATE.INITIALIZING;
         this.primary = primary;
         
-        System.err.println("replica " + replicaId + " init as INITIALIZING");
+        log.debug("replica " + replicaId + " init as INITIALIZING");
     }
     
     private void checkState() {
         
-        System.err.println("state: " + state + " commit-msg#: " + commitCommands.size());
+        log.debug("state: " + state + " commit-msg#: " + commitCommands.size());
         
         if (primary && state == STATE.INITIALIZING && clientCommand != null) {
-            System.err.println("replica " + replicaId + " INIT -> PREPARED(master)");
+            log.debug("replica " + replicaId + " INIT -> PREPARED(master)");
             state = STATE.PREPARED;
             //sendMessageToPeers(new Preprepare(sequenceNr, cmd.sequenceId));
             this.preprepare = MessageBuilder.crateFakeSelfPreprepare(sequenceNr, viewNr, clientCommand);
@@ -91,14 +95,14 @@ public class Transaction extends UntypedActor {
                  .forEach(x -> x.tell(MessageBuilder.createPreprepare(x.pathString(), sequenceNr, clientCommand), getSelf()));
         }
         if (state == STATE.INITIALIZING && (preprepare != null) && clientCommand != null) {
-            System.err.println("replica " + replicaId + " INIT -> PREPREPARED, sending PREPARE message");
+            log.debug("replica " + replicaId + " INIT -> PREPREPARED, sending PREPARE message");
             state = STATE.PREPREPARED;
             //sendMessageToPeers(new Prepare(this.sequenceNr));
             peers.parallelStream()
                  .forEach(x -> x.tell(MessageBuilder.createPrepare(x.pathString(), this.preprepare), getSelf()));
         }
         if (state == STATE.PREPREPARED && prepareCommands.size() == 2*fCount) {
-            System.err.println("replica " + replicaId + " PREPREPARED -> PREPARED, sending COMMIT message");
+            log.debug("replica " + replicaId + " PREPREPARED -> PREPARED, sending COMMIT message");
             commitCommands.add(MessageBuilder.createCommit("self", sequenceNr, viewNr));
             //sendMessageToPeers(new Commit(sequenceNr));
             peers.parallelStream()
@@ -106,7 +110,7 @@ public class Transaction extends UntypedActor {
             state = STATE.PREPARED;
         }
         if (state == STATE.PREPARED && commitCommands.size() == (2*fCount + 1)) {
-            System.err.println("replica " + replicaId + " PREPARED -> EXECUTE");
+            log.debug("replica " + replicaId + " PREPARED -> EXECUTE");
             state = STATE.COMMITED;
             this.executor.tell(new Execute(sequenceNr, this.clientCommand.operation), this.client);
         }
@@ -115,7 +119,7 @@ public class Transaction extends UntypedActor {
     @Override
     public void onReceive(Object o) throws Exception {
         
-        System.err.println("Transaction[" + replicaId + "|" + sequenceNr + "] got message " + o);
+        log.debug("Transaction[" + replicaId + "|" + sequenceNr + "] got message " + o);
         
         /* TODO: should we re-check messages here? */
         
