@@ -72,7 +72,7 @@ public class TransactionTest {
             
         for(int i = 0; i < 2 * f; i++) {
             Assert.assertEquals(tx.getState(), Transaction.STATE.PREPREPARED);
-            tx.addPrepare(new PrepareBuilder(preprepare.sequenceNr, preprepare.view, preprepare.digest).buildFor(rcpt), x -> {}, x -> {});
+            tx.addPrepare(new PrepareBuilder(preprepare.sequenceNr, preprepare.viewNr, preprepare.digest).buildFor(rcpt), x -> {}, x -> {});
         }
         Assert.assertEquals(tx.getState(), Transaction.STATE.PREPARED);
     }

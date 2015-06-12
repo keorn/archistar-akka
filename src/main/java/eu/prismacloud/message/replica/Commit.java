@@ -4,19 +4,14 @@ package eu.prismacloud.message.replica;
  *
  * @author andy
  */
-public class Commit {
+public class Commit extends ReplicaMessage {
  
-    public final int sequenceNr;
-    
-    public final int view;
-    
     public final byte[] mac;
     
     public final static byte[] command = "COMMIT".getBytes();
     
     Commit(int sequenceNr, int view, byte[] mac) {
-        this.sequenceNr = sequenceNr;
-        this.view = view;
+        super(view, sequenceNr);
         this.mac = mac;
     }
 }

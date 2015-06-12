@@ -65,7 +65,7 @@ public class Transaction {
     
     private void checkState(Consumer<MessageBuilder> peers, Consumer<ExecuteBuilder> exec) {
         
-        log.log(Level.FINER, "state: {0} commit-msg#: {1}", new Object[]{state, commitCommands.size()});
+        System.err.println("replica: " + replicaId + " state: " + state + " preprepared: " + (preprepare != null) + " prepare-msg#: " + prepareCommands.size() + " commit-msg#: " + commitCommands.size());
         
         if (primary && state == STATE.INITIALIZING && clientCommand != null) {
             log.log(Level.FINER, "replica {0} INIT -> PREPARED(master)", replicaId);
@@ -75,10 +75,10 @@ public class Transaction {
             this.preprepare = builder.buildFakeSelfPreprepare();
             peers.accept(builder);
         }
-        if (state == STATE.INITIALIZING && (preprepare != null) && clientCommand != null) {
+        if (!primary && state == STATE.INITIALIZING && (preprepare != null) && clientCommand != null) {
             log.log(Level.FINER, "replica {0} INIT -> PREPREPARED, sending PREPARE message", replicaId);
             state = STATE.PREPREPARED;
-            peers.accept(new PrepareBuilder(preprepare.sequenceNr, preprepare.view, preprepare.digest));
+            peers.accept(new PrepareBuilder(preprepare.sequenceNr, preprepare.viewNr, preprepare.digest));
         }
         
         if (state == STATE.PREPREPARED && prepareCommands.size() == 2*fCount) {
@@ -93,6 +93,8 @@ public class Transaction {
             state = STATE.COMMITED;
             exec.accept(new ExecuteBuilder(sequenceNr, this.clientCommand.operation, this.clientCommand.getSender()));
         }
+        
+        System.err.println("replica: " + replicaId + "(A) state: " + state + " preprepared: " + (preprepare != null) + " prepare-msg#: " + prepareCommands.size() + " commit-msg#: " + commitCommands.size());
     }
     
     public void addClientCommand(ClientCommand cmd, Consumer<MessageBuilder> peers, Consumer<ExecuteBuilder> exec) {

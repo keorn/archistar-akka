@@ -40,9 +40,6 @@ public class RemoteReplica extends UntypedActor {
         if (o instanceof MessageBuilder) {
             MessageBuilder b = (MessageBuilder)o;
             Object msg = b.buildFor("rcpt");
-            
-            System.err.println("sending from " + getSelf().path() + " to " + peer.pathString() + " msg: " + msg);
-        
             peer.tell(msg, getSender());
         }
     }   

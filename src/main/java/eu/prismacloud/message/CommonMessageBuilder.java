@@ -74,7 +74,7 @@ public class CommonMessageBuilder {
 
     public static void validate(Preprepare cmd) {
         KeyParameter key = PseudoKeyManager.keyFromTo("this", "rcpt");
-        byte[] newMac = PreprepareBuilder.createPreprepareMAC(key, cmd.sequenceNr, cmd.view, cmd.digest);
+        byte[] newMac = PreprepareBuilder.createPreprepareMAC(key, cmd.sequenceNr, cmd.viewNr, cmd.digest);
         
         if (!Arrays.equals(newMac, cmd.mac)) {
             throw new RuntimeException("MAC not equal!");   
@@ -83,7 +83,7 @@ public class CommonMessageBuilder {
     
     public static void validate(Prepare cmd) {
         KeyParameter key = PseudoKeyManager.keyFromTo("this", "rcpt");
-        byte[] newMac = PrepareBuilder.createPrepareMAC(key, cmd.sequenceNr, cmd.view, cmd.digest);
+        byte[] newMac = PrepareBuilder.createPrepareMAC(key, cmd.sequenceNr, cmd.viewNr, cmd.digest);
         
         if (!Arrays.equals(newMac, cmd.mac)) {
             throw new RuntimeException("MAC not equal!");   
@@ -92,7 +92,7 @@ public class CommonMessageBuilder {
     
     public static void validate(Commit cmd) {
         KeyParameter key = PseudoKeyManager.keyFromTo("this", "rcpt");
-        byte[] newMac = CommitBuilder.createCommitMAC(key, cmd.sequenceNr, cmd.view);
+        byte[] newMac = CommitBuilder.createCommitMAC(key, cmd.sequenceNr, cmd.viewNr);
         
         if (!Arrays.equals(newMac, cmd.mac)) {
             throw new RuntimeException("MAC not equal!");   

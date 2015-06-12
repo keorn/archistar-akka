@@ -4,11 +4,7 @@ package eu.prismacloud.message.replica;
  *
  * @author andy
  */
-public class Prepare {
-    
-    public final int sequenceNr;
-    
-    public final int view;
+public class Prepare extends ReplicaMessage {
     
     public final byte[] digest;
     
@@ -17,8 +13,7 @@ public class Prepare {
     public final static byte[] command = "PREPARE".getBytes();
     
     Prepare(int sequenceNr, int view, byte[] digest, byte[] mac) {
-        this.sequenceNr = sequenceNr;
-        this.view = view;
+        super(view, sequenceNr);
         this.digest= digest;
         this.mac = mac;
     }

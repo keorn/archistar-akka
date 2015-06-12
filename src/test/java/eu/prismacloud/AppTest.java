@@ -38,6 +38,9 @@ public class AppTest {
     }
 
     private void configureReplicas(Set<ActorRef> replicas, ExecutionContextExecutor dispatcher) throws Exception {
+        
+        Timeout timeout = new Timeout(Duration.create(10, "seconds"));
+        
         final ArrayList<Future<Object>> promisesConfigure = new ArrayList<>();
 
         replicas.parallelStream()

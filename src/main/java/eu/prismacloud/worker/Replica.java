@@ -10,18 +10,13 @@ import akka.japi.Creator;
 import akka.japi.Procedure;
 import eu.prismacloud.message.CheckPoint;
 import eu.prismacloud.message.ClientCommand;
-import eu.prismacloud.message.CommonMessageBuilder;
 import eu.prismacloud.message.replica_state.Configure;
-import eu.prismacloud.message.CreateTransaction;
 import eu.prismacloud.message.execution.ExecutedWithState;
 import eu.prismacloud.message.replica_state.ExecutorReady;
 import eu.prismacloud.message.replica_state.RemoteReplicasReady;
 import eu.prismacloud.message.replica_state.ReplicaConfigured;
 import eu.prismacloud.message.replica_state.ViewReady;
-import eu.prismacloud.message.replica.Commit;
-import eu.prismacloud.message.replica.Prepare;
-import eu.prismacloud.message.replica.Preprepare;
-import eu.prismacloud.message.replica.PreprepareBuilder;
+import eu.prismacloud.message.replica.ReplicaMessage;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
@@ -42,14 +37,8 @@ public class Replica extends UntypedActor {
     private final int fCount = 1;
     
     private final boolean master;
-    
-    private int seqCounter = 0;
-    
-    private final HashMap<Integer, ClientCommand> clientMap = new HashMap<>();
-    
-    private final HashMap<Integer, Preprepare> preprepareMap = new HashMap<>();
-    
-    private final ActorRef executor;
+        
+   private final ActorRef executor;
     
     private ActorRef remoteReplicas;
     
@@ -66,45 +55,11 @@ public class Replica extends UntypedActor {
                 
         if (message instanceof ClientCommand) {
             ClientCommand cmd = (ClientCommand)message;
-            
-            CommonMessageBuilder.validate(cmd);
             cmd.setSender(getSender());
-            
-            if (this.isMaster()) {
-                int newSeq = ++seqCounter;
-                getViewFor(viewNr).tell(new CreateTransaction(new PreprepareBuilder(newSeq, viewNr, cmd).buildFakeSelfPreprepare(),
-                                                              fCount, cmd), getSender());
-            } else {
-                /* was the client id already mentioned before? */
-                if (preprepareMap.containsKey(cmd.sequenceId)) {
-                   getViewFor(viewNr).tell(new CreateTransaction(preprepareMap.remove(cmd.sequenceId),
-                                                                 fCount, cmd), getSender()); 
-                } else {
-                    clientMap.put(cmd.sequenceId, cmd);
-                }
-            }
-        } else if (message instanceof Preprepare) {
-            Preprepare cmd = (Preprepare)message;
-            CommonMessageBuilder.validate(cmd);
-            
-            if (isMaster()) {
-                assert(false);
-            }
-            
-            if (clientMap.containsKey(cmd.clientSequence)) {
-                getViewFor(viewNr).tell(new CreateTransaction(cmd, fCount,
-                                                              clientMap.remove(cmd.clientSequence)), getSender()); 
-            } else {
-                preprepareMap.put(cmd.sequenceNr, cmd);
-            }
-        } else if (message instanceof Prepare) {
-            Prepare cmd = (Prepare)message;
-            CommonMessageBuilder.validate(cmd);
-            getViewFor(cmd.view).tell(cmd, ActorRef.noSender());
-       } else if (message instanceof Commit) {
-            Commit cmd = (Commit)message;
-            CommonMessageBuilder.validate(cmd);
-            getViewFor(cmd.view).tell(cmd, ActorRef.noSender());
+            getViewFor(viewNr).tell(message, ActorRef.noSender());
+        } else if (message instanceof ReplicaMessage) {
+            ReplicaMessage cmd = (ReplicaMessage)message;
+            getViewFor(cmd.viewNr).tell(message, ActorRef.noSender());
         } else if (message instanceof ExecutedWithState) {
             ExecutedWithState cmd = (ExecutedWithState)message;
             CheckPoint cp = new CheckPoint(cmd.sequenceNr, cmd.stateDigest, null);

@@ -5,7 +5,6 @@ import akka.testkit.JavaTestKit;
 import akka.testkit.TestActorRef;
 import eu.prismacloud.message.ClientCommand;
 import eu.prismacloud.message.CommonMessageBuilder;
-import eu.prismacloud.message.CreateTransaction;
 import eu.prismacloud.message.execution.Execute;
 import eu.prismacloud.message.replica.CommitBuilder;
 import eu.prismacloud.message.replica.PrepareBuilder;
@@ -56,9 +55,9 @@ public class ViewTest {
             
             final ClientCommand initialRequest = CommonMessageBuilder.createRequest(rcpt, clientSeqNr, operation);
             final Preprepare preprepare = new PreprepareBuilder(seqNr, viewNr, initialRequest).buildFor(rcpt);
-            final CreateTransaction ct = new CreateTransaction(preprepare, fCount, initialRequest);
             
-            ref.tell(ct, getRef());
+            ref.tell(initialRequest, getRef());
+            ref.tell(preprepare, getRef());
             
             for(int i = 0; i < 2 * f; i++) {
                 ref.tell(new PrepareBuilder(seqNr, viewNr, preprepare.digest).buildFor(rcpt), getRef());
