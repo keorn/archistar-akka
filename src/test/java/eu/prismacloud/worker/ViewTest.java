@@ -1,6 +1,5 @@
  package eu.prismacloud.worker;
 
-import akka.actor.ActorSelection;
 import akka.actor.ActorSystem;
 import akka.testkit.JavaTestKit;
 import akka.testkit.TestActorRef;
@@ -12,7 +11,6 @@ import eu.prismacloud.message.replica.CommitBuilder;
 import eu.prismacloud.message.replica.PrepareBuilder;
 import eu.prismacloud.message.replica.Preprepare;
 import eu.prismacloud.message.replica.PreprepareBuilder;
-import java.util.HashSet;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;

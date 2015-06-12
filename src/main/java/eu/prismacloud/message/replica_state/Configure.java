@@ -1,4 +1,4 @@
-package eu.prismacloud.message;
+package eu.prismacloud.message.replica_state;
 
 import akka.actor.ActorRef;
 import java.util.Set;

@@ -9,7 +9,7 @@ import eu.prismacloud.message.CreateTransaction;
 import eu.prismacloud.message.CommonMessageBuilder;
 import eu.prismacloud.message.execution.ExecutionCompleted;
 import eu.prismacloud.message.MessageBuilder;
-import eu.prismacloud.message.ViewReady;
+import eu.prismacloud.message.replica_state.ViewReady;
 import eu.prismacloud.message.replica.Prepare;
 import java.util.HashMap;
 import java.util.LinkedList;

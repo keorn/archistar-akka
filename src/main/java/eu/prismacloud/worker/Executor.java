@@ -9,7 +9,7 @@ import akka.japi.Creator;
 import eu.prismacloud.message.execution.Execute;
 import eu.prismacloud.message.execution.ExecutedWithState;
 import eu.prismacloud.message.execution.ExecutionCompleted;
-import eu.prismacloud.message.ExecutorReady;
+import eu.prismacloud.message.replica_state.ExecutorReady;
 import java.util.HashMap;
 import java.util.Map;
 

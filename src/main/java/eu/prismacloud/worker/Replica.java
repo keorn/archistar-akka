@@ -1,19 +1,23 @@
 package eu.prismacloud.worker;
 
 import akka.actor.ActorRef;
+import akka.actor.ActorSelection;
 import akka.actor.Props;
 import akka.actor.UntypedActor;
+import akka.event.Logging;
+import akka.event.LoggingAdapter;
 import akka.japi.Creator;
 import akka.japi.Procedure;
 import eu.prismacloud.message.CheckPoint;
 import eu.prismacloud.message.ClientCommand;
 import eu.prismacloud.message.CommonMessageBuilder;
-import eu.prismacloud.message.Configure;
+import eu.prismacloud.message.replica_state.Configure;
 import eu.prismacloud.message.CreateTransaction;
 import eu.prismacloud.message.execution.ExecutedWithState;
-import eu.prismacloud.message.ExecutorReady;
-import eu.prismacloud.message.RemoteReplicasReady;
-import eu.prismacloud.message.ViewReady;
+import eu.prismacloud.message.replica_state.ExecutorReady;
+import eu.prismacloud.message.replica_state.RemoteReplicasReady;
+import eu.prismacloud.message.replica_state.ReplicaConfigured;
+import eu.prismacloud.message.replica_state.ViewReady;
 import eu.prismacloud.message.replica.Commit;
 import eu.prismacloud.message.replica.Prepare;
 import eu.prismacloud.message.replica.Preprepare;
@@ -24,6 +28,13 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import scala.Option;
 
+/**
+ * Replica makes sure that a View always has valid transactions (including
+ * initial client command as well as Parts with sequence numbers) -- this might
+ * change our view-change protocol though.
+ * 
+ * @author andy
+ */
 public class Replica extends UntypedActor {
         
     private final int replicaId;
@@ -44,13 +55,15 @@ public class Replica extends UntypedActor {
     
     private final int viewNr = 1;
     
+    private final LoggingAdapter log = Logging.getLogger(getContext().system(), this);
+    
     /**
      * creates a transaction and forwards the message to the transaction
      */
     private Procedure<Object> configured = (Object message) -> {
         
-        System.err.println("replcia " + getReplicaId() + " message: " + message);
-        
+        System.err.println("received message: " + message);
+                
         if (message instanceof ClientCommand) {
             ClientCommand cmd = (ClientCommand)message;
             
@@ -139,15 +152,22 @@ public class Replica extends UntypedActor {
             executorReady = true;
         } else if (message instanceof Configure) {
             Configure config = (Configure)message;
-            remoteReplicas = getContext().actorOf(RemoteReplica.props(config.getPeers(), getSelf().path().toStringWithoutAddress()));
+
+            String me = getSelf().path().toStringWithoutAddress();
+            
+            /* remove myself from peers */
+            Set<ActorSelection> peers = config.getPeers().stream().filter(f -> !f.equalsIgnoreCase(me))
+                                              .map(f -> context().actorSelection(f))
+                                              .collect(Collectors.toSet());
+        
+            remoteReplicas = getContext().actorOf(RemoteReplicas.props(peers, getSelf()));
                         
             /* TODO: there should be only one active view -> can't we check against this? */
             getContext().actorOf(View.props(viewNr, isMaster(), replicaId, executor, remoteReplicas), "view-" + viewNr);
             
             configurerer = getSender();
             
-            /* become "normal" listener loop */
-            System.err.println("configuring..");
+            log.debug("new becoming configuring..");
             getContext().become(configuring);
         } else {
             unhandled(message);
@@ -163,7 +183,6 @@ public class Replica extends UntypedActor {
     private boolean viewReady = false;
     
     private Procedure<Object> configuring = (Object message) -> {
-        System.err.println("received: " + message);
         if (message instanceof ExecutorReady) {
             executorReady = true;
         } else if (message instanceof RemoteReplicasReady) {
@@ -176,8 +195,8 @@ public class Replica extends UntypedActor {
         
         if (executorReady && remotePeersReady && viewReady) {
             getContext().become(configured);
-            System.err.println("configured..");
-            configurerer.tell("configured!", ActorRef.noSender());
+            log.debug("new becoming configured..");
+            configurerer.tell(new ReplicaConfigured(), ActorRef.noSender());
         }
     };
 
