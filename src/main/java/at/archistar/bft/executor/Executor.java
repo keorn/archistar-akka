@@ -57,7 +57,7 @@ public class Executor extends UntypedActor {
     private void execute(Execute cmd, ActorRef sender) {
         log.info("replica[" + replicaId + "|" + cmd.sequenceNr + " EXECUTE " + cmd.command);
         lastExecuted++;
-        log.warning("sending message back to " + sender);
+        log.debug("sending message back to " + sender);
         sender.tell(new ExecutionCompleted(cmd.sequenceNr), ActorRef.noSender());
         
         if (lastExecuted % CHECKPOINT_INTERVAL == 0) {

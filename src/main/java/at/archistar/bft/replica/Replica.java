@@ -153,7 +153,7 @@ public class Replica extends UntypedActor {
         
         if (executorReady && remotePeersReady && viewReady) {
             getContext().become(configured);
-            log.debug("new becoming configured..");
+            System.err.println("CONFIGURED!");
             configurerer.tell(new ReplicaConfigured(), ActorRef.noSender());
         }
     };
@@ -178,9 +178,5 @@ public class Replica extends UntypedActor {
             
             checkpoints.put(checkPoint.lastSequenceNr, tmp);
         }
-    }
-    
-    public int getReplicaId() {
-        return replicaId;
     }
 }
